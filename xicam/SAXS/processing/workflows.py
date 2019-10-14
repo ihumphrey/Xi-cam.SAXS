@@ -6,6 +6,10 @@ from .chiintegrate import ChiIntegratePlugin
 from .xintegrate import XIntegratePlugin
 from .zintegrate import ZIntegratePlugin
 from .cakeintegrate import CakeIntegratePlugin
+from .onetime import OneTimeCorrelation
+from .fitting import FitScatteringFactor
+from .twotime import TwoTimeCorrelation
+from .fourierautocorrelator import FourierCorrelation
 
 
 class ReduceWorkflow(Workflow):
@@ -28,3 +32,35 @@ class DisplayWorkflow(Workflow):
         self.cake = CakeIntegratePlugin()
         self.processes = [self.cake]
         self.autoConnectAll()
+
+
+class TwoTime(Workflow):
+    name = '2-Time Correlation'
+
+    def __init__(self):
+        super(TwoTime, self).__init__()
+        self.addProcess(TwoTimeCorrelation())
+
+
+class OneTime(Workflow):
+    name = '1-Time Correlation'
+
+    def __init__(self):
+        super(OneTime, self).__init__()
+        onetime = OneTimeCorrelation()
+        self.addProcess(onetime)
+        fitting = FitScatteringFactor()
+        self.addProcess(fitting)
+        self.autoConnectAll()
+
+
+class FourierAutocorrelator(Workflow):
+    name = 'Fourier Correlation'
+
+    def __init__(self):
+        super(FourierAutocorrelator, self).__init__()
+        fourier = FourierCorrelation()
+        self.addProcess(fourier)
+
+
+

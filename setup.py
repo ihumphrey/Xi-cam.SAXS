@@ -6,7 +6,15 @@ Usage: pip install -e .
        twine upload dist/*
 """
 
-from setuptools import setup
+from os import path
+from setuptools import find_packages, setup
+
+here = path.abspath(path.dirname(__file__))
+
+with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
+    all_reqs = f.read().split('\n')
+
+install_requires = [x.strip() for x in all_reqs]
 
 setup(
     name='xicam.SAXS',
@@ -55,9 +63,9 @@ setup(
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
-    packages=['xicam.SAXS', 'xicam.SAXS.calibration', 'xicam.SAXS.masking',
-              'xicam.SAXS.processing', 'xicam.SAXS.widgets', 'xicam.SAXS.patches', 'xicam.SAXS.models',
-              'xicam.SAXS.formats'],
+    packages=find_packages(exclude=['docs', 'tests*']),#['xicam.SAXS', 'xicam.SAXS.calibration', 'xicam.SAXS.masking',
+             # 'xicam.SAXS.processing', 'xicam.SAXS.widgets', 'xicam.SAXS.patches', 'xicam.SAXS.models',
+             # 'xicam.SAXS.formats'],
 
     package_dir={},
 
@@ -69,7 +77,7 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['numpy', 'qtpy', 'pyFAI', 'scipy', 'dill'],  # 'astroscrappy' removed pending windows issue
+    install_requires=install_requires#['numpy', 'qtpy', 'pyFAI', 'scipy', 'dill'],  # 'astroscrappy' removed pending windows issue
 
     setup_requires=[],
 

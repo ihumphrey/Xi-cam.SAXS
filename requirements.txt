@@ -1,0 +1,18 @@
+# Dev/Deployment
+numpy
+qtpy
+pyFAI
+dill
+sphinx
+sphinx_rtd_theme
+nose
+coverage
+pypi-publisher
+scipy
+scikit-image
+event-model
+intake_bluesky
+
+# Wait until ronpandolfi's changes (#542) are in release /PyPi ...
+scikit-beam @ git+https://github.com/scikit-beam/scikit-beam
+

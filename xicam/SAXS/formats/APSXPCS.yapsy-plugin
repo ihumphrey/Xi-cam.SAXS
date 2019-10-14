@@ -1,0 +1,3 @@
+[Core]
+Name = xicam.XPCS.formats.APSXPCS
+Module = APSXPCS.py
