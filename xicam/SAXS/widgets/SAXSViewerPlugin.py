@@ -5,16 +5,17 @@ from qtpy.QtWidgets import *
 from qtpy.QtCore import *
 from qtpy.QtGui import *
 import numpy as np
+from databroker.core import BlueskyRun
 from xicam.core import msg
 from xicam.gui.widgets.dynimageview import DynImageView
 from xicam.gui.widgets.imageviewmixins import Crosshair, QCoordinates, CenterMarker, BetterButtons, EwaldCorrected, \
-    LogScaleIntensity
+    LogScaleIntensity, CatalogView
 import pyqtgraph as pg
 
 
-class SAXSViewerPluginBase(LogScaleIntensity, CenterMarker, BetterButtons, Crosshair, QCoordinates, DynImageView):
+class SAXSViewerPluginBase(LogScaleIntensity, CenterMarker, BetterButtons, Crosshair, QCoordinates, DynImageView, CatalogView):
 
-    def __init__(self, header: NonDBHeader = None, field: str = None, toolbar: QToolBar = None, *args, **kwargs):
+    def __init__(self, runCatalog: BlueskyRun = None, stream: str = "primary", field: str = None, toolbar: QToolBar = None, *args, **kwargs):
 
         super(SAXSViewerPluginBase, self).__init__(**kwargs)
         self.axesItem.invertY(False)
@@ -45,18 +46,19 @@ class SAXSViewerPluginBase(LogScaleIntensity, CenterMarker, BetterButtons, Cross
         # Setup results cache
         self.results = []
 
-        # Set header
-        if header: self.setHeader(header, field)
+        # Set run catalog
+        if runCatalog: self.setRunCatalog(runCatalog, stream, field)
 
-    def setHeader(self, header: NonDBHeader, field: str, *args, **kwargs):
-        self.header = header
+    def setRunCatalog(self, runCatalog: BlueskyRun, stream: str, field: str, *args, **kwargs):
+        self.runCatalog = runCatalog
+        self.stream = stream
         self.field = field
         # make lazy array from document
         data = None
         try:
-            data = header.meta_array(field)
+            data = runCatalog.xarray(field)
         except IndexError:
-            msg.logMessage(f'Header object contained no frames with field "{field}".', msg.ERROR)
+            msg.logMessage(f'BlueskyRun object contained no frames with field "{field}".', msg.ERROR)
 
         if data:
             # kwargs['transform'] = QTransform(1, 0, 0, -1, 0, data.shape[-2])
@@ -95,7 +97,7 @@ class SAXSViewerPluginBase(LogScaleIntensity, CenterMarker, BetterButtons, Cross
             except TypeError:
                 continue
         else:  # if self.toolbar.rawaction.isChecked():
-            self.setHeader(self.header, self.field)
+            self.setRunCatalog(self.runCatalog, self.field)
 
     def setResults(self, results):
         self.results = results
