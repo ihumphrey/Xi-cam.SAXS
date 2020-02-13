@@ -1,5 +1,6 @@
 from typing import Callable
 
+from pyqtgraph import FeedbackButton
 from pyqtgraph.parametertree import Parameter, ParameterTree
 from pyqtgraph.parametertree.parameterTypes import ActionParameter, ListParameter
 
@@ -51,6 +52,7 @@ class CorrelationParameterTree(ParameterTree):
         if self.processor:
             # Button added separately since update removes then adds all children in self.param
             self.processButton = ActionParameter(name="Run")
+            # self.processButton.btn = FeedbackButton("Run")
             self.processButton.sigActivated.connect(self.processor)
             self.addParameters(self.processButton)
 

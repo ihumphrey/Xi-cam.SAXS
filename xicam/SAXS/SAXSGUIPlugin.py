@@ -79,13 +79,13 @@ class SAXSPlugin(GUIPlugin):
         self.correlationView = TabView(self.catalogModel, widgetcls=SAXSReductionViewer,
                                        selectionmodel=self.selectionmodel,
                                        stream='primary', field=field)
-        self.twoTimeProcessor = TwoTimeParameterTree(processor=self.processTwoTime)
+        self.twoTimeProcessor = TwoTimeParameterTree(processor=self.processOneTime)
         self.twoTimeToolBar = XPCSToolBar(headermodel=self.catalogModel,
                                           selectionmodel=self.selectionmodel,
                                           view=self.correlationView.currentWidget,
                                           workflow=self.roiworkflow,
                                           index=0)
-        self.oneTimeProcessor = OneTimeParameterTree(processor=self.processOneTime)
+        self.oneTimeProcessor = OneTimeParameterTree(processor=self.processTwoTime)
         self.oneTimeToolBar = XPCSToolBar(headermodel=self.catalogModel,
                                           selectionmodel=self.selectionmodel,
                                           view=self.correlationView.currentWidget,
@@ -122,6 +122,10 @@ class SAXSPlugin(GUIPlugin):
         # Setup correlation widgets
         self.correlationResults = DerivedDataWidget(self.derivedDataModel)
 
+        from pyqtgraph import FeedbackButton
+        self.feedback = FeedbackButton("test")
+        self.feedback.clicked.connect(partial(self.process, self.correlationView.currentWidget(), None))
+
         self.stages = {
             'Calibrate': GUILayout(self.calibrationtabview,
                                    right=self.calibrationsettings.widget,
@@ -138,6 +142,7 @@ class SAXSPlugin(GUIPlugin):
             'Correlate': {
                 '2-Time Correlation': GUILayout(self.correlationView,
                                                 top=self.twoTimeToolBar,
+                                                righttop=self.feedback,
                                                 rightbottom=self.twoTimeProcessor,
                                                 bottom=self.correlationResults),
                 '1-Time Correlation': GUILayout(self.correlationView,
@@ -173,7 +178,11 @@ class SAXSPlugin(GUIPlugin):
         self.doDisplayWorkflow()
 
     def currentCatalog(self):
-        return self.catalogModel.itemFromIndex(self.selectionmodel.currentIndex()).data(Qt.UserRole)
+        item = self.catalogModel.itemFromIndex(self.selectionmodel.currentIndex())
+        if item:
+            return item.data(Qt.UserRole)
+        else:
+            return None
 
     def schema(self):
         saxs_schema = {
@@ -423,58 +432,74 @@ class SAXSPlugin(GUIPlugin):
         self.process(self.twoTimeProcessor, self.correlationView.currentWidget(),
                      finished_slot=self.updateDerivedDataModel)
 
-    def process(self, processor: CorrelationParameterTree, widget, **kwargs):
+    @threads.method() # try using QFuture in processTwoTime/OneTime; this gives us multiple kwarg 'finished_slot' error
+    def process(self, processor: CorrelationParameterTree, widget):
+        # self.feedback.processing("processing")
+        # import time
+        # time.sleep(2)
+        # if not self.currentCatalog():
+        #     self.feedback.failure("fail")
+        #     from pyqtgraph import ProgressDialog
+        #     dialog = ProgressDialog('test')
         if processor:
-            roiFuture = self.roiworkflow.execute(data=self.correlationView.currentWidget().image[0],
-                                                 image=self.correlationView.currentWidget().imageItem) # Pass in single frame for data shape
-            roiResult = roiFuture.result()
-            label = roiResult[-1]["roi"].value
+            if not self.currentCatalog():
+                msg.notifyMessage("Please open an image before trying to run the correlation.")
+                return
+            # Pass in single frame for data shape
+            roi_future = self.roiworkflow.execute(data=widget.image[0],
+                                                  image=widget.imageItem)
+            roi_result = roi_future.result()
+            label = roi_result[-1]["roi"].value
             if label is None:
                 msg.notifyMessage("Please define an ROI using the toolbar before running correlation.")
                 return
 
             workflow = processor.workflow
             # FIXME -- don't grab first match
-            technique = [technique for technique in self.schema()['techniques'] if technique['technique'] == 'scattering'][0]
+            technique = [technique for technique in self.schema()['techniques']
+                         if technique['technique'] == 'scattering'][0]
             stream, field = technique['data_mapping']['data_image']
             # TODO: the compute() takes a long time..., do we need to do this here? If so, show a progress bar...
             # Trim the data frames
+            # catalog = self.currentCatalog()
+            # data = [getattr(catalog, stream).to_dask()[field][0].where(
+            #     DataArray(label, dims=["dim_1", "dim_2"]), drop=True).compute()]
             catalog = self.currentCatalog()
-            data = [getattr(catalog, stream).to_dask()[field][0].where(
-                DataArray(label, dims=["dim_1", "dim_2"]), drop=True).compute()]
+            msg.showMessage("Trimming data")
+            msg.showBusy()
+            data = self._trim_data(catalog, stream, field, label)
+            msg.hideBusy()
             # Trim the dark images
-            darks = [None] * len(data)
+            msg.showMessage("Trimming darks")
+            msg.showBusy()
             dark_stream, dark_field = technique['data_mapping']['dark_image']
-            if stream in catalog:
-                darks = [getattr(catalog, dark_stream).to_dask()[dark_field][0].where(
-                    DataArray(label, dims=["dim_1", "dim_2"]), drop=True).compute()]
-            else:
-                msg.notifyMessage(f"No dark stream named \"{dark_stream}\" for current catalog. No dark correction.")
+            darks = self._trim_dark_data(catalog, dark_stream, dark_field, label)
+            msg.hideBusy()
             label = label.compress(np.any(label, axis=0), axis=1).compress(np.any(label, axis=1), axis=0)
             labels = [label] * len(data)  # TODO: update for multiple ROIs
             numLevels = [1] * len(data)
 
-            numBufs = []
+            num_bufs = []
             for i in range(len(data)):
                 shape = data[i].shape[0]
                 # multi_tau_corr requires num_bufs to be even
                 if shape % 2:
                     shape += 1
-                numBufs.append(shape)
+                num_bufs.append(shape)
 
-            if kwargs.get('finished_slot'):
-                finishedSlot = kwargs['finished_slot']
-            else:
-                finishedSlot = self.updateDerivedDataModel
+            # if kwargs.get('finished_slot'):
+            #     finished_slot = kwargs['finished_slot']
+            # else:
+            #     finished_slot = self.updateDerivedDataModel
 
             workflow_pickle = pickle.dumps(workflow)
             workflow.execute_all(None,
                                  bitmasked_images=data,
                                  dark_images=darks,
-                                 labels=labels,
-                                 finished_slot=partial(finishedSlot,
-                                                       workflow=workflow,
-                                                       workflow_pickle=workflow_pickle))
+                                 labels=labels)
+                                 # finished_slot=partial(finished_slot,
+                                 #                       workflow=workflow,
+                                 #                       workflow_pickle=workflow_pickle))
 
     def updateDerivedDataModel(self, workflow, **kwargs):
         parentItem = CheckableItem(workflow.name)
@@ -484,3 +509,19 @@ class SAXSPlugin(GUIPlugin):
             item.setCheckable(True)
             parentItem.appendRow(item)
         self.derivedDataModel.appendRow(parentItem)
+
+    # @threads.method()
+    def _trim_data(self, catalog, stream, field, roi):
+        return getattr(catalog, stream).to_dask()[field][0].where(
+            DataArray(roi, dims=["dim_1", "dim_2"]), drop=True).compute()
+
+    # @threads.method()
+    def _trim_dark_data(self, catalog, stream, field, roi):
+        # darks = [None] * len(data)
+        darks = []
+        if stream in catalog:
+            darks = getattr(catalog, stream).to_dask()[field][0].where(
+                DataArray(roi, dims=["dim_1", "dim_2"]), drop=True).compute()
+        else:
+            msg.notifyMessage(f"No dark stream named \"{stream}\" for current catalog. No dark correction.")
+        return darks

@@ -40,6 +40,10 @@ class CSXCorrectImage(ProcessingPlugin):
 
     def evaluate(self):
         data = np.asarray(self.bitmasked_images.value.astype(np.uint16))
+        if not self.dark_images:
+            from xicam.core import msg
+            msg.notifyMessage("No darks, not performing dark correction.")
+            return data
         reduced_dark_image = self.dark_images.value
         darks = None
         if reduced_dark_image is not None:
