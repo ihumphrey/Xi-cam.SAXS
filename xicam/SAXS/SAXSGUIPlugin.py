@@ -428,7 +428,8 @@ class SAXSPlugin(GUIPlugin):
         future = threads.QThreadFuture(self.process,
                                        self.oneTimeToolBar,
                                        self.correlationView.currentWidget,
-                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start().result()
+                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start()
+        future.result()
         # self.process(self.oneTimeProcessor, self.correlationView.currentWidget(),
         #              finished_slot=self.updateDerivedDataModel)
 
@@ -436,7 +437,8 @@ class SAXSPlugin(GUIPlugin):
         future = threads.QThreadFuture(self.process,
                                        self.twoTimeProcessor,
                                        self.correlationView.currentWidget(),
-                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start().result()
+                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start()
+        future.result()
         # self.process(self.twoTimeProcessor, self.correlationView.currentWidget(),
         #              finished_slot=self.updateDerivedDataModel)
 
