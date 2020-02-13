@@ -425,14 +425,22 @@ class SAXSPlugin(GUIPlugin):
 
 
     def processOneTime(self):
-        self.process(self.oneTimeProcessor, self.correlationView.currentWidget(),
-                     finished_slot=self.updateDerivedDataModel)
+        future = threads.QThreadFuture(self.process,
+                                       self.oneTimeToolBar,
+                                       self.correlationView.currentWidget,
+                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start().result()
+        # self.process(self.oneTimeProcessor, self.correlationView.currentWidget(),
+        #              finished_slot=self.updateDerivedDataModel)
 
     def processTwoTime(self):
-        self.process(self.twoTimeProcessor, self.correlationView.currentWidget(),
-                     finished_slot=self.updateDerivedDataModel)
+        future = threads.QThreadFuture(self.process,
+                                       self.twoTimeProcessor,
+                                       self.correlationView.currentWidget(),
+                                       finished_slot=partial(self.updateDerivedDataModel, self.twoTimeProcessor.workflow)).start().result()
+        # self.process(self.twoTimeProcessor, self.correlationView.currentWidget(),
+        #              finished_slot=self.updateDerivedDataModel)
 
-    @threads.method() # try using QFuture in processTwoTime/OneTime; this gives us multiple kwarg 'finished_slot' error
+    # @threads.method() # try using QFuture in processTwoTime/OneTime; this gives us multiple kwarg 'finished_slot' error
     def process(self, processor: CorrelationParameterTree, widget):
         # self.feedback.processing("processing")
         # import time
@@ -465,13 +473,11 @@ class SAXSPlugin(GUIPlugin):
             # data = [getattr(catalog, stream).to_dask()[field][0].where(
             #     DataArray(label, dims=["dim_1", "dim_2"]), drop=True).compute()]
             catalog = self.currentCatalog()
-            msg.showMessage("Trimming data")
-            msg.showBusy()
+
             data = self._trim_data(catalog, stream, field, label)
-            msg.hideBusy()
+
             # Trim the dark images
-            msg.showMessage("Trimming darks")
-            msg.showBusy()
+
             dark_stream, dark_field = technique['data_mapping']['dark_image']
             darks = self._trim_dark_data(catalog, dark_stream, dark_field, label)
             msg.hideBusy()
@@ -512,16 +518,23 @@ class SAXSPlugin(GUIPlugin):
 
     # @threads.method()
     def _trim_data(self, catalog, stream, field, roi):
-        return getattr(catalog, stream).to_dask()[field][0].where(
+        msg.showMessage("Trimming data")
+        msg.showBusy()
+        data = getattr(catalog, stream).to_dask()[field][0].where(
             DataArray(roi, dims=["dim_1", "dim_2"]), drop=True).compute()
+        msg.hideBusy()
+        return data
 
     # @threads.method()
     def _trim_dark_data(self, catalog, stream, field, roi):
         # darks = [None] * len(data)
+        msg.showMessage("Trimming darks")
+        msg.showBusy()
         darks = []
         if stream in catalog:
             darks = getattr(catalog, stream).to_dask()[field][0].where(
                 DataArray(roi, dims=["dim_1", "dim_2"]), drop=True).compute()
         else:
             msg.notifyMessage(f"No dark stream named \"{stream}\" for current catalog. No dark correction.")
+        msg.hideBusy()
         return darks
